@@ -17,6 +17,19 @@ export default {
     const auth = "Basic " + btoa(user + ":" + pass);
     const deviceId = "00000000-00000000-001527FF-FF3B516E";
 
+    function extractDataTag(xmlText) {
+      const match = xmlText.match(/<data>([\s\S]*?)<\/data>/i);
+      return match ? match[1].trim() : "";
+    }
+
+    function decodeBase64ToText(base64) {
+      try {
+        return atob(base64);
+      } catch (e) {
+        return "";
+      }
+    }
+
     async function sciGetFile(path) {
       const body =
         '<?xml version="1.0"?>' +
@@ -27,22 +40,28 @@ export default {
         '</file_system>' +
         '</sci_request>';
 
-      const resp = await fetch("https://my.idigi.com/ws/sci?unused=" + crypto.randomUUID(), {
-        method: "POST",
-        headers: {
-          "Authorization": auth,
-          "Content-Type": "text/xml",
-          "Accept": "*/*"
-        },
-        body: body
-      });
+      const resp = await fetch(
+        "https://my.idigi.com/ws/sci?unused=" + crypto.randomUUID(),
+        {
+          method: "POST",
+          headers: {
+            "Authorization": auth,
+            "Content-Type": "text/xml",
+            "Accept": "*/*"
+          },
+          body: body
+        }
+      );
 
-      const text = await resp.text();
-      return new Response(text, {
+      const xmlText = await resp.text();
+      const base64Data = extractDataTag(xmlText);
+      const decoded = decodeBase64ToText(base64Data);
+
+      return new Response(decoded || xmlText, {
         status: resp.status,
         headers: {
           "Access-Control-Allow-Origin": "*",
-          "Content-Type": "text/plain"
+          "Content-Type": "text/plain; charset=utf-8"
         }
       });
     }
@@ -59,7 +78,7 @@ export default {
       status: 200,
       headers: {
         "Access-Control-Allow-Origin": "*",
-        "Content-Type": "text/plain"
+        "Content-Type": "text/plain; charset=utf-8"
       }
     });
   }
