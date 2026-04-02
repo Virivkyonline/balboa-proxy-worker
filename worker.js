@@ -19,7 +19,7 @@ export default {
 
     function makeTextResponse(text, status) {
       return new Response(text, {
-        status: status,
+        status,
         headers: {
           "Access-Control-Allow-Origin": "*",
           "Content-Type": "text/plain; charset=utf-8"
@@ -29,7 +29,7 @@ export default {
 
     function makeJsonResponse(obj, status) {
       return new Response(JSON.stringify(obj, null, 2), {
-        status: status,
+        status,
         headers: {
           "Access-Control-Allow-Origin": "*",
           "Content-Type": "application/json; charset=utf-8"
@@ -94,7 +94,7 @@ export default {
             "Content-Type": "text/xml",
             "Accept": "*/*"
           },
-          body: body
+          body
         }
       );
 
@@ -103,7 +103,7 @@ export default {
       return {
         ok: resp.ok,
         status: resp.status,
-        text: text
+        text
       };
     }
 
@@ -117,20 +117,8 @@ export default {
         '</file_system>' +
         '</sci_request>';
 
-      const resp = await fetch(
-        "https://my.idigi.com/ws/sci?unused=" + crypto.randomUUID(),
-        {
-          method: "POST",
-          headers: {
-            "Authorization": auth,
-            "Content-Type": "text/xml",
-            "Accept": "*/*"
-          },
-          body: body
-        }
-      );
-
-      const xmlText = await resp.text();
+      const result = await sciPostXml(body);
+      const xmlText = result.text;
       const base64Data = extractDataTag(xmlText);
 
       let bytes = new Uint8Array(0);
@@ -146,15 +134,15 @@ export default {
       }
 
       return makeJsonResponse({
-        ok: resp.ok,
-        status: resp.status,
+        ok: result.ok,
+        status: result.status,
         file: path,
-        deviceId: deviceId,
+        deviceId,
         base64: base64Data,
         bytesLength: bytes.length,
-        hex: hex,
+        hex,
         xml: xmlText
-      }, resp.status);
+      }, result.status);
     }
 
     async function sendButtonCode(code) {
@@ -169,29 +157,16 @@ export default {
         '</data_service>' +
         '</sci_request>';
 
-      const resp = await fetch(
-        "https://my.idigi.com/ws/sci?unused=" + crypto.randomUUID(),
-        {
-          method: "POST",
-          headers: {
-            "Authorization": auth,
-            "Content-Type": "text/xml",
-            "Accept": "*/*"
-          },
-          body: body
-        }
-      );
-
-      const text = await resp.text();
+      const result = await sciPostXml(body);
 
       return makeJsonResponse({
-        ok: resp.ok,
-        status: resp.status,
+        ok: result.ok,
+        status: result.status,
         action: "button",
-        code: code,
-        deviceId: deviceId,
-        response: text
-      }, resp.status);
+        code,
+        deviceId,
+        response: result.text
+      }, result.status);
     }
 
     async function sendDataService(targetName, value, noSpaces = false) {
@@ -214,8 +189,8 @@ export default {
         ok: result.ok,
         status: result.status,
         target: targetName,
-        value: value,
-        deviceId: deviceId,
+        value,
+        deviceId,
         response: result.text
       }, result.status);
     }
@@ -254,8 +229,8 @@ export default {
 
       return {
         bytes,
-        hex: bytesToHex(bytes),
         base64: bytesToBase64(bytes),
+        hex: bytesToHex(bytes),
         parsed: {
           f1h, f1m, f1dh, f1dm,
           f2enabled, f2h, f2m, f2dh, f2dm
@@ -287,7 +262,7 @@ export default {
 
     if (url.pathname === "/buttons") {
       return makeJsonResponse({
-        deviceId: deviceId,
+        deviceId,
         buttons: [
           { name: "Pump1", code: 4 },
           { name: "Pump2", code: 5 },
@@ -318,10 +293,20 @@ export default {
         }, 400);
       }
 
-      const hh = clamp(parseIntSafe(hhRaw, 0), 0, 23);
-      const mm = clamp(parseIntSafe(mmRaw, 0), 0, 59);
-      const timeStr = String(hh).padStart(2, "0") + ":" + String(mm).padStart(2, "0");
+      const hh = parseInt(hhRaw, 10);
+      const mm = parseInt(mmRaw, 10);
 
+      if (
+        Number.isNaN(hh) || Number.isNaN(mm) ||
+        hh < 0 || hh > 23 || mm < 0 || mm > 59
+      ) {
+        return makeJsonResponse({
+          ok: false,
+          error: "Neplatný čas"
+        }, 400);
+      }
+
+      const timeStr = String(hh).padStart(2, "0") + ":" + String(mm).padStart(2, "0");
       return sendDataService("SystemTime", timeStr, false);
     }
 
@@ -372,7 +357,7 @@ export default {
         ok: result.ok,
         status: result.status,
         target: "Filters",
-        deviceId: deviceId,
+        deviceId,
         parsed: packet.parsed,
         base64: packet.base64,
         hex: packet.hex,
@@ -380,6 +365,6 @@ export default {
       }, result.status);
     }
 
-   return makeTextResponse("Balboa worker running 777", 200);
+    return makeTextResponse("Balboa worker running", 200);
   }
 };
