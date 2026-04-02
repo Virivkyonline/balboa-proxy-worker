@@ -22,12 +22,21 @@ export default {
       return match ? match[1].trim() : "";
     }
 
-    function decodeBase64ToText(base64) {
-      try {
-        return atob(base64);
-      } catch (e) {
-        return "";
+    function base64ToBytes(base64) {
+      const bin = atob(base64);
+      const out = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) {
+        out[i] = bin.charCodeAt(i);
       }
+      return out;
+    }
+
+    function bytesToHex(bytes) {
+      let hex = "";
+      for (let i = 0; i < bytes.length; i++) {
+        hex += bytes[i].toString(16).padStart(2, "0");
+      }
+      return hex;
     }
 
     async function sciGetFile(path) {
@@ -55,13 +64,35 @@ export default {
 
       const xmlText = await resp.text();
       const base64Data = extractDataTag(xmlText);
-      const decoded = decodeBase64ToText(base64Data);
 
-      return new Response(decoded || xmlText, {
+      let bytes = new Uint8Array(0);
+      let hex = "";
+
+      if (base64Data) {
+        try {
+          bytes = base64ToBytes(base64Data);
+          hex = bytesToHex(bytes);
+        } catch (e) {
+          hex = "";
+        }
+      }
+
+      const result = {
+        ok: resp.ok,
+        status: resp.status,
+        file: path,
+        deviceId: deviceId,
+        base64: base64Data,
+        bytesLength: bytes.length,
+        hex: hex,
+        xml: xmlText
+      };
+
+      return new Response(JSON.stringify(result, null, 2), {
         status: resp.status,
         headers: {
           "Access-Control-Allow-Origin": "*",
-          "Content-Type": "text/plain; charset=utf-8"
+          "Content-Type": "application/json; charset=utf-8"
         }
       });
     }
