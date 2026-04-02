@@ -4,7 +4,7 @@ export default {
 
     const corsHeaders = {
       "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Methods": "GET, OPTIONS",
+      "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
       "Access-Control-Allow-Headers": "Content-Type"
     };
 
@@ -15,99 +15,44 @@ export default {
     const user = "BalboaWaterAndroidApp";
     const pass = "SW2Bra7a!";
     const auth = "Basic " + btoa(user + ":" + pass);
+    const deviceId = "00000000-00000000-001527FF-FF3B516E";
 
-    if (url.pathname === "/panelupdate") {
-      const device = (url.searchParams.get("device") || "").trim();
+    async function sciGetFile(path) {
+      const body =
+        '<?xml version="1.0"?>' +
+        '<sci_request version="1.0">' +
+        '<file_system cache="false">' +
+        '<targets><device id="' + deviceId + '"/></targets>' +
+        '<commands><get_file path="' + path + '"/></commands>' +
+        '</file_system>' +
+        '</sci_request>';
 
-      if (!device) {
-        return new Response("Missing device", {
-          status: 400,
-          headers: {
-            "Access-Control-Allow-Origin": "*",
-            "Content-Type": "text/plain"
-          }
-        });
-      }
+      const resp = await fetch("https://my.idigi.com/ws/sci?unused=" + crypto.randomUUID(), {
+        method: "POST",
+        headers: {
+          "Authorization": auth,
+          "Content-Type": "text/xml",
+          "Accept": "*/*"
+        },
+        body: body
+      });
 
-      const target = "https://my.idigi.com/ws/data/~/" + device + "/PanelUpdate.txt";
-
-      try {
-        const resp = await fetch(target, {
-          method: "GET",
-          headers: {
-            "Authorization": auth
-          }
-        });
-
-        const text = await resp.text();
-
-        return new Response(text, {
-          status: resp.status,
-          headers: {
-            "Access-Control-Allow-Origin": "*",
-            "Content-Type": "text/plain"
-          }
-        });
-      } catch (e) {
-        return new Response("Worker error: " + e.message, {
-          status: 500,
-          headers: {
-            "Access-Control-Allow-Origin": "*",
-            "Content-Type": "text/plain"
-          }
-        });
-      }
+      const text = await resp.text();
+      return new Response(text, {
+        status: resp.status,
+        headers: {
+          "Access-Control-Allow-Origin": "*",
+          "Content-Type": "text/plain"
+        }
+      });
     }
 
-    if (url.pathname === "/devices") {
-      const target = "https://my.idigi.com/ws/DeviceCore/.json";
+    if (url.pathname === "/panelupdate") {
+      return sciGetFile("PanelUpdate.txt");
+    }
 
-      try {
-        const resp = await fetch(target, {
-          method: "GET",
-          headers: {
-            "Authorization": auth,
-            "Accept": "application/json"
-          }
-        });
-
-        const data = await resp.json();
-        const items = Array.isArray(data.items) ? data.items : [];
-
-        const filtered = items
-          .filter(function (x) {
-            return x.dpDeviceType === "BWG Spa";
-          })
-          .map(function (x) {
-            return {
-              devId: x.id && x.id.devId ? x.id.devId : "",
-              devMac: x.devMac || "",
-              dpLastKnownIp: x.dpLastKnownIp || "",
-              devConnectwareId: x.devConnectwareId || "",
-              grpId: x.grpId || "",
-              cstId: x.cstId || "",
-              dpGlobalIp: x.dpGlobalIp || "",
-              dpConnectionStatus: x.dpConnectionStatus || "",
-              dpLastConnectTime: x.dpLastConnectTime || ""
-            };
-          });
-
-        return new Response(JSON.stringify(filtered, null, 2), {
-          status: 200,
-          headers: {
-            "Access-Control-Allow-Origin": "*",
-            "Content-Type": "application/json"
-          }
-        });
-      } catch (e) {
-        return new Response("Worker error: " + e.message, {
-          status: 500,
-          headers: {
-            "Access-Control-Allow-Origin": "*",
-            "Content-Type": "text/plain"
-          }
-        });
-      }
+    if (url.pathname === "/deviceconfig") {
+      return sciGetFile("DeviceConfiguration.txt");
     }
 
     return new Response("Balboa worker running", {
