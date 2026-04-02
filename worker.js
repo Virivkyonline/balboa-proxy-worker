@@ -2,14 +2,14 @@ export default {
   async fetch(request) {
     const url = new URL(request.url);
 
-    const headers = {
+    const corsHeaders = {
       "Access-Control-Allow-Origin": "*",
       "Access-Control-Allow-Methods": "GET, OPTIONS",
       "Access-Control-Allow-Headers": "Content-Type"
     };
 
     if (request.method === "OPTIONS") {
-      return new Response("", { headers });
+      return new Response("", { headers: corsHeaders });
     }
 
     const user = "BalboaWaterAndroidApp";
@@ -71,10 +71,29 @@ export default {
           }
         });
 
-        const text = await resp.text();
+        const data = await resp.json();
+        const items = Array.isArray(data.items) ? data.items : [];
 
-        return new Response(text, {
-          status: resp.status,
+        const filtered = items
+          .filter(function (x) {
+            return x.dpDeviceType === "BWG Spa";
+          })
+          .map(function (x) {
+            return {
+              devId: x.id && x.id.devId ? x.id.devId : "",
+              devMac: x.devMac || "",
+              dpLastKnownIp: x.dpLastKnownIp || "",
+              devConnectwareId: x.devConnectwareId || "",
+              grpId: x.grpId || "",
+              cstId: x.cstId || "",
+              dpGlobalIp: x.dpGlobalIp || "",
+              dpConnectionStatus: x.dpConnectionStatus || "",
+              dpLastConnectTime: x.dpLastConnectTime || ""
+            };
+          });
+
+        return new Response(JSON.stringify(filtered, null, 2), {
+          status: 200,
           headers: {
             "Access-Control-Allow-Origin": "*",
             "Content-Type": "application/json"
