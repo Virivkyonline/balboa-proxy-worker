@@ -17,6 +17,26 @@ export default {
     const auth = "Basic " + btoa(user + ":" + pass);
     const deviceId = "00000000-00000000-001527FF-FF3B516E";
 
+    function makeTextResponse(text, status) {
+      return new Response(text, {
+        status: status,
+        headers: {
+          "Access-Control-Allow-Origin": "*",
+          "Content-Type": "text/plain; charset=utf-8"
+        }
+      });
+    }
+
+    function makeJsonResponse(obj, status) {
+      return new Response(JSON.stringify(obj, null, 2), {
+        status: status,
+        headers: {
+          "Access-Control-Allow-Origin": "*",
+          "Content-Type": "application/json; charset=utf-8"
+        }
+      });
+    }
+
     function extractDataTag(xmlText) {
       const match = xmlText.match(/<data>([\s\S]*?)<\/data>/i);
       return match ? match[1].trim() : "";
@@ -77,7 +97,7 @@ export default {
         }
       }
 
-      const result = {
+      return makeJsonResponse({
         ok: resp.ok,
         status: resp.status,
         file: path,
@@ -86,15 +106,44 @@ export default {
         bytesLength: bytes.length,
         hex: hex,
         xml: xmlText
-      };
+      }, resp.status);
+    }
 
-      return new Response(JSON.stringify(result, null, 2), {
-        status: resp.status,
-        headers: {
-          "Access-Control-Allow-Origin": "*",
-          "Content-Type": "application/json; charset=utf-8"
+    async function sendButtonCode(code) {
+      const body =
+        '<?xml version="1.0"?>' +
+        '<sci_request version="1.0">' +
+        '<data_service>' +
+        '<targets><device id="' + deviceId + '"/></targets>' +
+        '<requests>' +
+        '<device_request target_name="Button">' + String(code) + '</device_request>' +
+        '</requests>' +
+        '</data_service>' +
+        '</sci_request>';
+
+      const resp = await fetch(
+        "https://my.idigi.com/ws/sci?unused=" + crypto.randomUUID(),
+        {
+          method: "POST",
+          headers: {
+            "Authorization": auth,
+            "Content-Type": "text/xml",
+            "Accept": "*/*"
+          },
+          body: body
         }
-      });
+      );
+
+      const text = await resp.text();
+
+      return makeJsonResponse({
+        ok: resp.ok,
+        status: resp.status,
+        action: "button",
+        code: code,
+        deviceId: deviceId,
+        response: text
+      }, resp.status);
     }
 
     if (url.pathname === "/panelupdate") {
@@ -105,12 +154,42 @@ export default {
       return sciGetFile("DeviceConfiguration.txt");
     }
 
-    return new Response("Balboa worker running", {
-      status: 200,
-      headers: {
-        "Access-Control-Allow-Origin": "*",
-        "Content-Type": "text/plain; charset=utf-8"
+    if (url.pathname === "/button") {
+      const codeParam = (url.searchParams.get("code") || "").trim();
+      const code = parseInt(codeParam, 10);
+
+      if (!codeParam || Number.isNaN(code)) {
+        return makeJsonResponse({
+          ok: false,
+          error: "Chýba alebo je neplatný parameter code"
+        }, 400);
       }
-    });
+
+      return sendButtonCode(code);
+    }
+
+    if (url.pathname === "/buttons") {
+      return makeJsonResponse({
+        deviceId: deviceId,
+        buttons: [
+          { name: "Pump1", code: 4 },
+          { name: "Pump2", code: 5 },
+          { name: "Pump3", code: 6 },
+          { name: "Pump4", code: 7 },
+          { name: "Pump5", code: 8 },
+          { name: "Pump6", code: 9 },
+          { name: "Blower", code: 12 },
+          { name: "Mister", code: 14 },
+          { name: "Light1", code: 17 },
+          { name: "Light2", code: 18 },
+          { name: "Aux1", code: 22 },
+          { name: "Aux2", code: 23 },
+          { name: "TempRange", code: 80 },
+          { name: "HeatMode", code: 81 }
+        ]
+      }, 200);
+    }
+
+    return makeTextResponse("Balboa worker running", 200);
   }
 };
