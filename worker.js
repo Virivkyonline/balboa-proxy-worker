@@ -43,6 +43,11 @@ export default {
       return match ? match[1].trim() : "";
     }
 
+    function extractDeviceRequestText(xmlText) {
+      const match = xmlText.match(/<device_request\b[^>]*>([\s\S]*?)<\/device_request>/i);
+      return match ? match[1].trim() : "";
+    }
+
     function base64ToBytes(base64) {
       const bin = atob(base64);
       const out = new Uint8Array(bin.length);
@@ -58,6 +63,86 @@ export default {
         hex += bytes[i].toString(16).padStart(2, "0");
       }
       return hex;
+    }
+
+    function calcChecksum(bytes, length) {
+      let crc = 0xB5;
+      for (let i = 0; i < length; i++) {
+        crc ^= bytes[i];
+        for (let b = 0; b < 8; b++) {
+          if (crc & 0x80) {
+            crc = ((crc << 1) ^ 0x07) & 0xFF;
+          } else {
+            crc = (crc << 1) & 0xFF;
+          }
+        }
+      }
+      return crc & 0xFF;
+    }
+
+    function parseFilterCycleBytes(bytes) {
+      if (!bytes || bytes.length < 12) return null;
+
+      // Appka pri parse prependne 0x7E, takže surová odpoveď začína od indexu 1 nižšie:
+      // raw[0]=13, raw[1]=10, raw[2]=191, raw[3]=35
+      // raw[4]=fc1Hour, raw[5]=fc1Min, raw[6]=fc1DurHour, raw[7]=fc1DurMin
+      // raw[8]=fc2Enabled|fc2Hour, raw[9]=fc2Min, raw[10]=fc2DurHour, raw[11]=fc2DurMin
+
+      const cycle2Byte = bytes[8] ?? 0;
+
+      const fc1Hour = bytes[4] ?? 0;
+      const fc1Min = bytes[5] ?? 0;
+      const fc1DurHour = bytes[6] ?? 0;
+      const fc1DurMin = bytes[7] ?? 0;
+
+      const fc2Enabled = (cycle2Byte & 0x80) !== 0;
+      const fc2Hour = cycle2Byte & 0x7F;
+      const fc2Min = bytes[9] ?? 0;
+      const fc2DurHour = bytes[10] ?? 0;
+      const fc2DurMin = bytes[11] ?? 0;
+
+      return {
+        filterCycle1: {
+          startsAtHour: fc1Hour,
+          startsAtMinute: fc1Min,
+          durationHour: fc1DurHour,
+          durationMinute: fc1DurMin
+        },
+        filterCycle2: {
+          enabled: fc2Enabled,
+          startsAtHour: fc2Hour,
+          startsAtMinute: fc2Min,
+          durationHour: fc2DurHour,
+          durationMinute: fc2DurMin
+        }
+      };
+    }
+
+    function buildFilterCycleBase64(fc1Hour, fc1Min, fc1DurHour, fc1DurMin, fc2Enabled, fc2Hour, fc2Min, fc2DurHour, fc2DurMin) {
+      const bytes = new Uint8Array(13);
+      bytes[0] = 13;
+      bytes[1] = 10;
+      bytes[2] = 191;
+      bytes[3] = 35;
+      bytes[4] = fc1Hour & 0xFF;
+      bytes[5] = fc1Min & 0xFF;
+      bytes[6] = fc1DurHour & 0xFF;
+      bytes[7] = fc1DurMin & 0xFF;
+      bytes[8] = ((fc2Enabled ? 0x80 : 0x00) | (fc2Hour & 0x7F)) & 0xFF;
+      bytes[9] = fc2Min & 0xFF;
+      bytes[10] = fc2DurHour & 0xFF;
+      bytes[11] = fc2DurMin & 0xFF;
+      bytes[12] = calcChecksum(bytes, 12);
+
+      let bin = "";
+      for (let i = 0; i < bytes.length; i++) {
+        bin += String.fromCharCode(bytes[i]);
+      }
+      return {
+        base64: btoa(bin),
+        bytes,
+        hex: bytesToHex(bytes)
+      };
     }
 
     async function sciGetFile(path) {
@@ -134,18 +219,19 @@ export default {
 
       const text = await resp.text();
 
-      return makeJsonResponse({
-        ok: resp.ok,
-        status: resp.status,
-        action: targetName,
-        value: safeValue,
-        deviceId,
-        response: text
-      }, resp.status);
+      return { resp, text, targetName, value: safeValue };
     }
 
     async function sendButtonCode(code) {
-      return sendDeviceRequest("Button", String(code));
+      const result = await sendDeviceRequest("Button", String(code));
+      return makeJsonResponse({
+        ok: result.resp.ok,
+        status: result.resp.status,
+        action: "Button",
+        value: String(code),
+        deviceId,
+        response: result.text
+      }, result.resp.status);
     }
 
     if (url.pathname === "/") {
@@ -185,7 +271,15 @@ export default {
         }, 400);
       }
 
-      return sendDeviceRequest("SetTemp", valueParam);
+      const result = await sendDeviceRequest("SetTemp", valueParam);
+      return makeJsonResponse({
+        ok: result.resp.ok,
+        status: result.resp.status,
+        action: "SetTemp",
+        value: valueParam,
+        deviceId,
+        response: result.text
+      }, result.resp.status);
     }
 
     if (url.pathname === "/tempunits") {
@@ -198,7 +292,15 @@ export default {
         }, 400);
       }
 
-      return sendDeviceRequest("TempUnits", value);
+      const result = await sendDeviceRequest("TempUnits", value);
+      return makeJsonResponse({
+        ok: result.resp.ok,
+        status: result.resp.status,
+        action: "TempUnits",
+        value,
+        deviceId,
+        response: result.text
+      }, result.resp.status);
     }
 
     if (url.pathname === "/systemtime") {
@@ -223,7 +325,15 @@ export default {
       const timeValue =
         String(hh).padStart(2, "0") + ":" + String(mm).padStart(2, "0");
 
-      return sendDeviceRequest("SystemTime", timeValue);
+      const result = await sendDeviceRequest("SystemTime", timeValue);
+      return makeJsonResponse({
+        ok: result.resp.ok,
+        status: result.resp.status,
+        action: "SystemTime",
+        value: timeValue,
+        deviceId,
+        response: result.text
+      }, result.resp.status);
     }
 
     if (url.pathname === "/timeformat") {
@@ -236,109 +346,157 @@ export default {
         }, 400);
       }
 
-      return sendDeviceRequest("TimeFormat", value);
+      const result = await sendDeviceRequest("TimeFormat", value);
+      return makeJsonResponse({
+        ok: result.resp.ok,
+        status: result.resp.status,
+        action: "TimeFormat",
+        value,
+        deviceId,
+        response: result.text
+      }, result.resp.status);
     }
 
     if (url.pathname === "/filters") {
-      const value = (url.searchParams.get("value") || "").trim();
+      const rawValue = (url.searchParams.get("value") || "").trim();
 
-      if (!value) {
+      // Podpora pôvodného priameho value
+      if (rawValue) {
+        const result = await sendDeviceRequest("Filters", rawValue);
+        return makeJsonResponse({
+          ok: result.resp.ok,
+          status: result.resp.status,
+          action: "Filters",
+          value: rawValue,
+          deviceId,
+          response: result.text
+        }, result.resp.status);
+      }
+
+      const fc1Hour = Number(url.searchParams.get("f1h"));
+      const fc1Min = Number(url.searchParams.get("f1m"));
+      const fc1DurHour = Number(url.searchParams.get("f1dh"));
+      const fc1DurMin = Number(url.searchParams.get("f1dm"));
+      const fc2EnabledParam = (url.searchParams.get("f2en") || "").trim().toLowerCase();
+      const fc2Hour = Number(url.searchParams.get("f2h"));
+      const fc2Min = Number(url.searchParams.get("f2m"));
+      const fc2DurHour = Number(url.searchParams.get("f2dh"));
+      const fc2DurMin = Number(url.searchParams.get("f2dm"));
+
+      const valid =
+        Number.isInteger(fc1Hour) && fc1Hour >= 0 && fc1Hour <= 23 &&
+        Number.isInteger(fc1Min) && fc1Min >= 0 && fc1Min <= 59 &&
+        Number.isInteger(fc1DurHour) && fc1DurHour >= 0 && fc1DurHour <= 23 &&
+        Number.isInteger(fc1DurMin) && fc1DurMin >= 0 && fc1DurMin <= 59 &&
+        Number.isInteger(fc2Hour) && fc2Hour >= 0 && fc2Hour <= 23 &&
+        Number.isInteger(fc2Min) && fc2Min >= 0 && fc2Min <= 59 &&
+        Number.isInteger(fc2DurHour) && fc2DurHour >= 0 && fc2DurHour <= 23 &&
+        Number.isInteger(fc2DurMin) && fc2DurMin >= 0 && fc2DurMin <= 59 &&
+        (fc2EnabledParam === "1" || fc2EnabledParam === "0" || fc2EnabledParam === "true" || fc2EnabledParam === "false");
+
+      if (!valid) {
         return makeJsonResponse({
           ok: false,
-          error: "Chýba parameter value"
+          error: "Chýba parameter value alebo sú neplatné parametre f1h,f1m,f1dh,f1dm,f2en,f2h,f2m,f2dh,f2dm"
         }, 400);
       }
 
-      return sendDeviceRequest("Filters", value);
+      const fc2Enabled = fc2EnabledParam === "1" || fc2EnabledParam === "true";
+      const built = buildFilterCycleBase64(
+        fc1Hour, fc1Min, fc1DurHour, fc1DurMin,
+        fc2Enabled, fc2Hour, fc2Min, fc2DurHour, fc2DurMin
+      );
+
+      const result = await sendDeviceRequest("Filters", built.base64);
+
+      return makeJsonResponse({
+        ok: result.resp.ok,
+        status: result.resp.status,
+        action: "Filters",
+        deviceId,
+        request: {
+          f1h: fc1Hour,
+          f1m: fc1Min,
+          f1dh: fc1DurHour,
+          f1dm: fc1DurMin,
+          f2en: fc2Enabled,
+          f2h: fc2Hour,
+          f2m: fc2Min,
+          f2dh: fc2DurHour,
+          f2dm: fc2DurMin
+        },
+        encoded: {
+          base64: built.base64,
+          hex: built.hex
+        },
+        response: result.text
+      }, result.resp.status);
     }
 
     if (url.pathname === "/requestfilters") {
-      return sendDeviceRequest("Request", "Filters");
+      const result = await sendDeviceRequest("Request", "Filters");
+      const base64Data = extractDeviceRequestText(result.text);
+
+      let bytes = new Uint8Array(0);
+      let hex = "";
+      let parsed = null;
+
+      if (base64Data) {
+        try {
+          bytes = base64ToBytes(base64Data);
+          hex = bytesToHex(bytes);
+          parsed = parseFilterCycleBytes(bytes);
+        } catch {
+          bytes = new Uint8Array(0);
+          hex = "";
+          parsed = null;
+        }
+      }
+
+      return makeJsonResponse({
+        ok: result.resp.ok,
+        status: result.resp.status,
+        action: "Request",
+        value: "Filters",
+        deviceId,
+        base64: base64Data,
+        bytesLength: bytes.length,
+        hex,
+        parsed,
+        response: result.text
+      }, result.resp.status);
     }
 
     if (url.pathname === "/getfilters") {
-      try {
-        const filterCandidates = [
-          "FilterCycle.txt",
-          "FilterCycles.txt",
-          "FilterSettings.txt",
-          "FilterConfig.txt",
-          "Filters.txt",
-          "CycleFilter.txt",
-          "Cycle1.txt",
-          "Cycle2.txt"
-        ];
+      const result = await sendDeviceRequest("Request", "Filters");
+      const base64Data = extractDeviceRequestText(result.text);
 
-        const results = [];
+      let bytes = new Uint8Array(0);
+      let hex = "";
+      let parsed = null;
 
-        for (const file of filterCandidates) {
-          try {
-            const body =
-              '<?xml version="1.0"?>' +
-              '<sci_request version="1.0">' +
-              '<file_system cache="false">' +
-              '<targets><device id="' + deviceId + '"/></targets>' +
-              '<commands><get_file path="' + file + '"/></commands>' +
-              '</file_system>' +
-              '</sci_request>';
-
-            const resp = await fetch(sciUrl, {
-              method: "POST",
-              headers: {
-                "Authorization": auth,
-                "Content-Type": "text/xml",
-                "Accept": "*/*"
-              },
-              body
-            });
-
-            const xmlText = await resp.text();
-            const base64Data = extractDataTag(xmlText);
-
-            let bytes = new Uint8Array(0);
-            let hex = "";
-
-            if (base64Data) {
-              try {
-                bytes = base64ToBytes(base64Data);
-                hex = bytesToHex(bytes);
-              } catch {
-                bytes = new Uint8Array(0);
-                hex = "";
-              }
-            }
-
-            results.push({
-              file,
-              ok: resp.ok && !!base64Data,
-              status: resp.status,
-              base64: base64Data,
-              bytesLength: bytes.length,
-              hex,
-              xml: xmlText
-            });
-          } catch (innerErr) {
-            results.push({
-              file,
-              ok: false,
-              error: String(innerErr)
-            });
-          }
+      if (base64Data) {
+        try {
+          bytes = base64ToBytes(base64Data);
+          hex = bytesToHex(bytes);
+          parsed = parseFilterCycleBytes(bytes);
+        } catch {
+          bytes = new Uint8Array(0);
+          hex = "";
+          parsed = null;
         }
-
-        return makeJsonResponse({
-          ok: true,
-          status: 200,
-          deviceId,
-          results
-        }, 200);
-      } catch (err) {
-        return makeJsonResponse({
-          ok: false,
-          status: 500,
-          error: String(err)
-        }, 500);
       }
+
+      return makeJsonResponse({
+        ok: result.resp.ok,
+        status: result.resp.status,
+        deviceId,
+        base64: base64Data,
+        bytesLength: bytes.length,
+        hex,
+        parsed,
+        response: result.text
+      }, result.resp.status);
     }
 
     if (url.pathname === "/buttons") {
