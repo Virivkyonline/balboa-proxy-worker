@@ -256,6 +256,91 @@ export default {
       return sendDeviceRequest("Request", "Filters");
     }
 
+    if (url.pathname === "/getfilters") {
+      try {
+        const filterCandidates = [
+          "FilterCycle.txt",
+          "FilterCycles.txt",
+          "FilterSettings.txt",
+          "FilterConfig.txt",
+          "Filters.txt",
+          "CycleFilter.txt",
+          "Cycle1.txt",
+          "Cycle2.txt"
+        ];
+
+        const results = [];
+
+        for (const file of filterCandidates) {
+          try {
+            const body =
+              '<?xml version="1.0"?>' +
+              '<sci_request version="1.0">' +
+              '<file_system cache="false">' +
+              '<targets><device id="' + deviceId + '"/></targets>' +
+              '<commands><get_file path="' + file + '"/></commands>' +
+              '</file_system>' +
+              '</sci_request>';
+
+            const resp = await fetch(sciUrl, {
+              method: "POST",
+              headers: {
+                "Authorization": auth,
+                "Content-Type": "text/xml",
+                "Accept": "*/*"
+              },
+              body
+            });
+
+            const xmlText = await resp.text();
+            const base64Data = extractDataTag(xmlText);
+
+            let bytes = new Uint8Array(0);
+            let hex = "";
+
+            if (base64Data) {
+              try {
+                bytes = base64ToBytes(base64Data);
+                hex = bytesToHex(bytes);
+              } catch {
+                bytes = new Uint8Array(0);
+                hex = "";
+              }
+            }
+
+            results.push({
+              file,
+              ok: resp.ok && !!base64Data,
+              status: resp.status,
+              base64: base64Data,
+              bytesLength: bytes.length,
+              hex,
+              xml: xmlText
+            });
+          } catch (innerErr) {
+            results.push({
+              file,
+              ok: false,
+              error: String(innerErr)
+            });
+          }
+        }
+
+        return makeJsonResponse({
+          ok: true,
+          status: 200,
+          deviceId,
+          results
+        }, 200);
+      } catch (err) {
+        return makeJsonResponse({
+          ok: false,
+          status: 500,
+          error: String(err)
+        }, 500);
+      }
+    }
+
     if (url.pathname === "/buttons") {
       return makeJsonResponse({
         deviceId,
