@@ -81,20 +81,20 @@ export default {
     }
 
     function parseFilterCycleBytes(bytes) {
-  if (!bytes || bytes.length < 13) return null;
+  if (!bytes || bytes.length < 12) return null;
 
-  const cycle2Byte = bytes[9] ?? 0;
+  const cycle2Byte = bytes[8] ?? 0;
 
-  const fc1Hour = bytes[5] ?? 0;
-  const fc1Min = bytes[6] ?? 0;
-  const fc1DurHour = bytes[7] ?? 0;
-  const fc1DurMin = bytes[8] ?? 0;
+  const fc1Hour = bytes[4] ?? 0;
+  const fc1Min = bytes[5] ?? 0;
+  const fc1DurHour = bytes[6] ?? 0;
+  const fc1DurMin = bytes[7] ?? 0;
 
   const fc2Enabled = (cycle2Byte & 0x80) !== 0;
   const fc2Hour = cycle2Byte & 0x7F;
-  const fc2Min = bytes[10] ?? 0;
-  const fc2DurHour = bytes[11] ?? 0;
-  const fc2DurMin = bytes[12] ?? 0;
+  const fc2Min = bytes[9] ?? 0;
+  const fc2DurHour = bytes[10] ?? 0;
+  const fc2DurMin = bytes[11] ?? 0;
 
   return {
     filterCycle1: {
