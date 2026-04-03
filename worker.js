@@ -16,6 +16,7 @@ export default {
     const pass = "SW2Bra7a!";
     const auth = "Basic " + btoa(user + ":" + pass);
     const deviceId = "00000000-00000000-001527FF-FF3B516E";
+    const sciUrl = "https://my.idigi.com/ws/sci?unused=" + crypto.randomUUID();
 
     function makeTextResponse(text, status = 200) {
       return new Response(text, {
@@ -69,18 +70,15 @@ export default {
         '</file_system>' +
         '</sci_request>';
 
-      const resp = await fetch(
-        "https://my.idigi.com/ws/sci?unused=" + crypto.randomUUID(),
-        {
-          method: "POST",
-          headers: {
-            "Authorization": auth,
-            "Content-Type": "text/xml",
-            "Accept": "*/*"
-          },
-          body
-        }
-      );
+      const resp = await fetch(sciUrl, {
+        method: "POST",
+        headers: {
+          "Authorization": auth,
+          "Content-Type": "text/xml",
+          "Accept": "*/*"
+        },
+        body
+      });
 
       const xmlText = await resp.text();
       const base64Data = extractDataTag(xmlText);
@@ -124,18 +122,15 @@ export default {
         '</data_service>' +
         '</sci_request>';
 
-      const resp = await fetch(
-        "https://my.idigi.com/ws/sci?unused=" + crypto.randomUUID(),
-        {
-          method: "POST",
-          headers: {
-            "Authorization": auth,
-            "Content-Type": "text/xml",
-            "Accept": "*/*"
-          },
-          body
-        }
-      );
+      const resp = await fetch(sciUrl, {
+        method: "POST",
+        headers: {
+          "Authorization": auth,
+          "Content-Type": "text/xml",
+          "Accept": "*/*"
+        },
+        body
+      });
 
       const text = await resp.text();
 
@@ -242,32 +237,6 @@ export default {
       }
 
       return sendDeviceRequest("TimeFormat", value);
-    }
-
-    if (url.pathname === "/temprange") {
-      const value = (url.searchParams.get("value") || "").trim().toLowerCase();
-
-      if (value !== "low" && value !== "high") {
-        return makeJsonResponse({
-          ok: false,
-          error: "Parameter value musí byť low alebo high"
-        }, 400);
-      }
-
-      return sendDeviceRequest("TempRange", value);
-    }
-
-    if (url.pathname === "/heatmode") {
-      const value = (url.searchParams.get("value") || "").trim().toLowerCase();
-
-      if (value !== "ready" && value !== "rest") {
-        return makeJsonResponse({
-          ok: false,
-          error: "Parameter value musí byť ready alebo rest"
-        }, 400);
-      }
-
-      return sendDeviceRequest("HeatMode", value);
     }
 
     if (url.pathname === "/filters") {
