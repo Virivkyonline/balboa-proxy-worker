@@ -81,42 +81,37 @@ export default {
     }
 
     function parseFilterCycleBytes(bytes) {
-      if (!bytes || bytes.length < 12) return null;
+  if (!bytes || bytes.length < 13) return null;
 
-      // Appka pri parse prependne 0x7E, takže surová odpoveď začína od indexu 1 nižšie:
-      // raw[0]=13, raw[1]=10, raw[2]=191, raw[3]=35
-      // raw[4]=fc1Hour, raw[5]=fc1Min, raw[6]=fc1DurHour, raw[7]=fc1DurMin
-      // raw[8]=fc2Enabled|fc2Hour, raw[9]=fc2Min, raw[10]=fc2DurHour, raw[11]=fc2DurMin
+  const cycle2Byte = bytes[9] ?? 0;
 
-      const cycle2Byte = bytes[8] ?? 0;
+  const fc1Hour = bytes[5] ?? 0;
+  const fc1Min = bytes[6] ?? 0;
+  const fc1DurHour = bytes[7] ?? 0;
+  const fc1DurMin = bytes[8] ?? 0;
 
-      const fc1Hour = bytes[4] ?? 0;
-      const fc1Min = bytes[5] ?? 0;
-      const fc1DurHour = bytes[6] ?? 0;
-      const fc1DurMin = bytes[7] ?? 0;
+  const fc2Enabled = (cycle2Byte & 0x80) !== 0;
+  const fc2Hour = cycle2Byte & 0x7F;
+  const fc2Min = bytes[10] ?? 0;
+  const fc2DurHour = bytes[11] ?? 0;
+  const fc2DurMin = bytes[12] ?? 0;
 
-      const fc2Enabled = (cycle2Byte & 0x80) !== 0;
-      const fc2Hour = cycle2Byte & 0x7F;
-      const fc2Min = bytes[9] ?? 0;
-      const fc2DurHour = bytes[10] ?? 0;
-      const fc2DurMin = bytes[11] ?? 0;
-
-      return {
-        filterCycle1: {
-          startsAtHour: fc1Hour,
-          startsAtMinute: fc1Min,
-          durationHour: fc1DurHour,
-          durationMinute: fc1DurMin
-        },
-        filterCycle2: {
-          enabled: fc2Enabled,
-          startsAtHour: fc2Hour,
-          startsAtMinute: fc2Min,
-          durationHour: fc2DurHour,
-          durationMinute: fc2DurMin
-        }
-      };
+  return {
+    filterCycle1: {
+      startsAtHour: fc1Hour,
+      startsAtMinute: fc1Min,
+      durationHour: fc1DurHour,
+      durationMinute: fc1DurMin
+    },
+    filterCycle2: {
+      enabled: fc2Enabled,
+      startsAtHour: fc2Hour,
+      startsAtMinute: fc2Min,
+      durationHour: fc2DurHour,
+      durationMinute: fc2DurMin
     }
+  };
+}
 
     function buildFilterCycleBase64(fc1Hour, fc1Min, fc1DurHour, fc1DurMin, fc2Enabled, fc2Hour, fc2Min, fc2DurHour, fc2DurMin) {
       const bytes = new Uint8Array(13);
