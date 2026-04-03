@@ -15,7 +15,9 @@ export default {
     const user = "BalboaWaterAndroidApp";
     const pass = "SW2Bra7a!";
     const auth = "Basic " + btoa(user + ":" + pass);
-    const deviceId = "00000000-00000000-001527FF-FF3B516E";
+    const defaultDeviceId = "00000000-00000000-001527FF-FF3B516E";
+const deviceId =
+  (url.searchParams.get("deviceId") || "").trim() || defaultDeviceId;
     const sciUrl = "https://my.idigi.com/ws/sci?unused=" + crypto.randomUUID();
 
     function makeTextResponse(text, status = 200) {
