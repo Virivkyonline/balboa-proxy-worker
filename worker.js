@@ -66,19 +66,22 @@ export default {
     }
 
     function calcChecksum(bytes, length) {
-      let crc = 0xB5;
-      for (let i = 0; i < length; i++) {
-        crc ^= bytes[i];
-        for (let b = 0; b < 8; b++) {
-          if (crc & 0x80) {
-            crc = ((crc << 1) ^ 0x07) & 0xFF;
-          } else {
-            crc = (crc << 1) & 0xFF;
-          }
-        }
+  let crc = 0x02;
+
+  for (let i = 0; i < length; i++) {
+    crc ^= bytes[i];
+    for (let b = 0; b < 8; b++) {
+      if (crc & 0x80) {
+        crc = ((crc << 1) ^ 0x07) & 0xFF;
+      } else {
+        crc = (crc << 1) & 0xFF;
       }
-      return crc & 0xFF;
     }
+  }
+
+  crc ^= 0x02;
+  return crc & 0xFF;
+}
 
     function parseFilterCycleBytes(bytes) {
   if (!bytes || bytes.length < 12) return null;
